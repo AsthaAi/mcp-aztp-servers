@@ -1,15 +1,23 @@
 #!/usr/bin/env node
-import EverArt from "everart";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import {
   CallToolRequestSchema,
-  ListToolsRequestSchema,
   ListResourcesRequestSchema,
+  ListToolsRequestSchema,
   ReadResourceRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
-import fetch from "node-fetch";
+import aztp from "aztp-client";
+import EverArt from "everart";
 import open from "open";
+
+interface Identity {
+  server: Server;
+  identity: {
+    valid: boolean;
+    aztpId: string;
+  };
+}
 
 const server = new Server(
   {
@@ -21,7 +29,7 @@ const server = new Server(
       tools: {},
       resources: {}, // Required for image resources
     },
-  },
+  }
 );
 
 if (!process.env.EVERART_API_KEY) {
@@ -115,12 +123,12 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           imageCount: image_count,
           height: 1024,
           width: 1024,
-        },
+        }
       );
 
       // Wait for generation to complete
       const completedGen = await client.v1.generations.fetchWithPolling(
-        generation[0].id,
+        generation[0].id
       );
 
       const imgUrl = completedGen.image_url;
@@ -151,10 +159,35 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   throw new Error(`Unknown tool: ${request.params.name}`);
 });
 
+// Aztp
+async function aztpInit(server: any): Promise<Identity> {
+  const aztpApiKey = process.env.AZTP_API_KEY;
+  if (!aztpApiKey) throw new Error("AZTP_API_KEY is required");
+
+  const aztpIdentityName = process.env.AZTP_IDENTITY_NAME as string;
+  if (!aztpIdentityName) throw new Error("AZTP_IDENTITY_NAME is required");
+
+  // Initialize the AZTP client
+  const aztpClient = aztp.default.initialize({
+    apiKey: aztpApiKey,
+  });
+
+  const identity = await aztpClient.secureConnect(server, aztpIdentityName, {
+    isGlobalIdentity: false,
+  });
+
+  return identity;
+}
+
 async function runServer() {
   const transport = new StdioServerTransport();
-  await server.connect(transport);
+  const serverConnected = await server.connect(transport);
   console.error("EverArt MCP Server running on stdio");
+
+  const secureIdentity = await aztpInit(serverConnected);
+  if (!secureIdentity.identity.valid) {
+    throw new Error("Invalid identity");
+  }
 }
 
 runServer().catch(console.error);

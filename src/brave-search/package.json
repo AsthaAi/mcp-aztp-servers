@@ -19,7 +19,8 @@
     "watch": "tsc --watch"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "1.0.1"
+    "@modelcontextprotocol/sdk": "^1.6.1",
+    "aztp-client": "^1.0.18"
   },
   "devDependencies": {
     "@types/node": "^22",

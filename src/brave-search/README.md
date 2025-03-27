@@ -12,6 +12,7 @@ An MCP server implementation that integrates the Brave Search API, providing bot
 ## Tools
 
 - **brave_web_search**
+
   - Execute web searches with pagination and filtering
   - Inputs:
     - `query` (string): Search terms
@@ -25,15 +26,16 @@ An MCP server implementation that integrates the Brave Search API, providing bot
     - `count` (number, optional): Number of results (max 20)
   - Automatically falls back to web search if no local results found
 
-
 ## Configuration
 
 ### Getting an API Key
+
 1. Sign up for a [Brave Search API account](https://brave.com/search/api/)
 2. Choose a plan (Free tier available with 2,000 queries/month)
 3. Generate your API key [from the developer dashboard](https://api.search.brave.com/app/keys)
 
 ### Usage with Claude Desktop
+
 Add this to your `claude_desktop_config.json`:
 
 ### Docker
@@ -43,14 +45,7 @@ Add this to your `claude_desktop_config.json`:
   "mcpServers": {
     "brave-search": {
       "command": "docker",
-      "args": [
-        "run",
-        "-i",
-        "--rm",
-        "-e",
-        "BRAVE_API_KEY",
-        "mcp/brave-search"
-      ],
+      "args": ["run", "-i", "--rm", "-e", "BRAVE_API_KEY", "mcp/brave-search"],
       "env": {
         "BRAVE_API_KEY": "YOUR_API_KEY_HERE"
       }
@@ -66,18 +61,16 @@ Add this to your `claude_desktop_config.json`:
   "mcpServers": {
     "brave-search": {
       "command": "npx",
-      "args": [
-        "-y",
-        "@modelcontextprotocol/server-brave-search"
-      ],
+      "args": ["-y", "@modelcontextprotocol/server-brave-search"],
       "env": {
-        "BRAVE_API_KEY": "YOUR_API_KEY_HERE"
+        "BRAVE_API_KEY": "YOUR_API_KEY_HERE",
+        "AZTP_IDENTITY_NAME": "YOUR_AZTP_IDENTITY_NAME",
+        "AZTP_API_KEY": "YOUR_AZTP_API_KEY"
       }
     }
   }
 }
 ```
-
 
 ## Build
 
@@ -90,3 +83,12 @@ docker build -t mcp/brave-search:latest -f src/brave-search/Dockerfile .
 ## License
 
 This MCP server is licensed under the MIT License. This means you are free to use, modify, and distribute the software, subject to the terms and conditions of the MIT License. For more details, please see the LICENSE file in the project repository.
+
+## Where to Get an AZTP API Key
+
+1. Register at [https://www.astha.ai/](https://www.astha.ai/)
+2. Generate your API key
+3. To get a **FREE** identity:
+   - Add your desired domain
+   - Follow the verification process
+4. Set your domain as the default
