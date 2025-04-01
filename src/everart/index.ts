@@ -14,7 +14,7 @@ import open from "open";
 interface Identity {
   server: Server;
   identity: {
-    valid: boolean;
+    verify: boolean;
     aztpId: string;
   };
 }
@@ -75,8 +75,19 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
         required: ["prompt"],
       },
     },
+    {
+      name: "get_everart_aztp_identity",
+      description: "Get AZTP identity of the everart MCP server. This is used to secure the connection between the everart MCP server and the AZTP server.",
+      inputSchema: {
+        type: "object",
+        properties: {},
+      },
+    },
   ],
 }));
+
+// Global variable for aztpClient
+let aztpClient: any;
 
 server.setRequestHandler(ListResourcesRequestSchema, async () => {
   return {
@@ -156,6 +167,44 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       };
     }
   }
+
+  if (request.params.name === "get_aztp_identity") {
+    try {
+      const aztpApiKey = process.env.AZTP_API_KEY;
+      if (!aztpApiKey) throw new Error("AZTP_API_KEY is required");
+
+      // Initialize the AZTP client
+      const aztpClient = aztp.default.initialize({
+        apiKey: aztpApiKey,
+      });
+
+      console.log("Received get_aztp_identity request");
+
+      if (!aztpClient) {
+        throw new Error("AZTP client not initialized");
+      }
+
+      console.log("Getting identity with AZTP...");
+      const identity = await aztpClient.getIdentity(server);
+
+      console.log("Identity retrieved successfully");
+      return {
+        content: [
+          {
+            type: "text",
+            text: `AZTP Identity: ${JSON.stringify(identity, null, 2)}`,
+          },
+        ],
+      };
+    } catch (error) {
+      console.error("Error in get_aztp_identity tool:", error);
+      return {
+        content: [{ type: "text", text: `Error getting identity: ${error instanceof Error ? error.message : String(error)}` }],
+        isError: true,
+      };
+    }
+  }
+
   throw new Error(`Unknown tool: ${request.params.name}`);
 });
 
@@ -164,19 +213,49 @@ async function aztpInit(server: any): Promise<Identity> {
   const aztpApiKey = process.env.AZTP_API_KEY;
   if (!aztpApiKey) throw new Error("AZTP_API_KEY is required");
 
-  const aztpIdentityName = process.env.AZTP_IDENTITY_NAME as string;
-  if (!aztpIdentityName) throw new Error("AZTP_IDENTITY_NAME is required");
-
   // Initialize the AZTP client
   const aztpClient = aztp.default.initialize({
     apiKey: aztpApiKey,
   });
 
-  const identity = await aztpClient.secureConnect(server, aztpIdentityName, {
-    isGlobalIdentity: false,
-  });
+  const mcpName = process.env.AZTP_IDENTITY_NAME as string;
+  if (!mcpName) throw new Error("AZTP_IDENTITY_NAME is required");
 
-  return identity;
+
+
+  const linkTo = process.env.AZTP_LINK_TO as string | null;
+  const parentIdentity = process.env.AZTP_PARENT_IDENTITY as string | null;
+  const trustDomain = process.env.AZTP_TRUST_DOMAIN as string | null;
+
+  // Secure the server identity
+  interface MetadataType {
+    isGlobalIdentity: boolean;
+    trustDomain?: string;
+    linkTo?: string[];
+    parentIdentity?: string;
+  }
+
+  console.log("mcpName:", mcpName);
+
+  const metadata: MetadataType = {
+    isGlobalIdentity: false
+  };
+
+  if (trustDomain) {
+    metadata.trustDomain = trustDomain;
+  }
+
+  if (linkTo) {
+    metadata.linkTo = [linkTo];
+  }
+
+  if (parentIdentity) {
+    metadata.parentIdentity = parentIdentity;
+  }
+
+  const securedAgent = await aztpClient.secureConnect(server, mcpName, metadata);
+
+  return securedAgent;
 }
 
 async function runServer() {
@@ -184,8 +263,8 @@ async function runServer() {
   const serverConnected = await server.connect(transport);
   console.error("EverArt MCP Server running on stdio");
 
-  const secureIdentity = await aztpInit(serverConnected);
-  if (!secureIdentity.identity.valid) {
+  const secureIdentity = await aztpInit(server);
+  if (!secureIdentity.identity.verify) {
     throw new Error("Invalid identity");
   }
 }
