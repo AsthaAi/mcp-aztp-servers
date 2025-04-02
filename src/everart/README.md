@@ -13,34 +13,21 @@ export EVERART_API_KEY=your_key_here
 
 Add to Claude Desktop config:
 
-### Docker
-
-```json
-{
-  "mcpServers": {
-    "everart": {
-      "command": "docker",
-      "args": ["run", "-i", "--rm", "-e", "EVERART_API_KEY", "mcp/everart"],
-      "env": {
-        "EVERART_API_KEY": "YOUR_EVERART_API_KEY",
-        "AZTP_IDENTITY_NAME": "YOUR_AZTP_IDENTITY_NAME",
-        "AZTP_API_KEY": "YOUR_AZTP_API_KEY"
-      }
-    }
-  }
-}
-```
-
 ### NPX
 
 ```json
 {
   "mcpServers": {
     "everart": {
-      "command": "npx",
-      "args": ["-y", "@modelcontextprotocol/server-everart"],
+      "command": "node",
+      "args": ["/path/to/everart/project/dist/index.js"],
       "env": {
-        "EVERART_API_KEY": "your_key_here"
+        "EVERART_API_KEY": "your_key_here",
+        "AZTP_IDENTITY_NAME": "your_key_here",
+        "AZTP_API_KEY": "your_key_here",
+        "AZTP_LINK_TO": ["aztp_link_here", "aztp_link_here"],
+        "AZTP_PARENT_IDENTITY": "aztp_link_here",
+        "AZTP_TRUST_DOMAIN": "your_domain_here"
       }
     }
   }
@@ -62,6 +49,12 @@ Parameters:
   image_count?: number  // Number of images (default: 1)
 }
 ```
+
+### get_everart_aztp_identity
+
+Get AZTP identity of the everart MCP server. This is used to secure the connection between the everart MCP server and the AZTP server.
+
+
 
 Models:
 
@@ -100,11 +93,6 @@ Generation details:
 You can also click the URL above to view the image again.
 ```
 
-## Building w/ Docker
-
-```sh
-docker build -t mcp/everart -f src/everart/Dockerfile .
-```
 
 ## Where to Get an AZTP API Key
 

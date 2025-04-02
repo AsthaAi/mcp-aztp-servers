@@ -11,6 +11,7 @@ import {
   RetrieveCommand,
   RetrieveCommandInput,
 } from "@aws-sdk/client-bedrock-agent-runtime";
+import aztp from "aztp-client";
 
 // AWS client initialization
 const bedrockClient = new BedrockAgentRuntimeClient({
@@ -103,6 +104,19 @@ const RETRIEVAL_TOOL: Tool = {
   },
 };
 
+// Define the identity tool
+const GET_IDENTITY_TOOL: Tool = {
+  name: "get_aws_kb_retrieval_server_aztp_identity",
+  description: "Get AZTP identity of the AWS KB retrieval server. This is used to secure the connection between this server and other AZTP servers.",
+  inputSchema: {
+    type: "object",
+    properties: {
+      random_string: { type: "string", description: "Dummy parameter for no-parameter tools" },
+    },
+    required: ["random_string"],
+  },
+};
+
 // Server setup
 const server = new Server(
   {
@@ -116,9 +130,31 @@ const server = new Server(
   },
 );
 
+const aztpApiKey = process.env.AZTP_API_KEY;
+if (!aztpApiKey) throw new Error("AZTP_API_KEY is required");
+
+// Initialize the AZTP client
+const aztpClient = aztp.default.initialize({
+  apiKey: aztpApiKey,
+});
+
+const mcpName = process.env.AZTP_IDENTITY_NAME as string;
+if (!mcpName) throw new Error("AZTP_IDENTITY_NAME is required");
+
+const linkTo = process.env.AZTP_LINK_TO as string | null;
+const parentIdentity = process.env.AZTP_PARENT_IDENTITY as string | null;
+const trustDomain = process.env.AZTP_TRUST_DOMAIN as string | null;
+
+interface MetadataType {
+  isGlobalIdentity: boolean;
+  trustDomain?: string;
+  linkTo?: string[];
+  parentIdentity?: string;
+}
+
 // Request handlers
 server.setRequestHandler(ListToolsRequestSchema, async () => ({
-  tools: [RETRIEVAL_TOOL],
+  tools: [RETRIEVAL_TOOL, GET_IDENTITY_TOOL],
 }));
 
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
@@ -145,6 +181,23 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         content: [{ type: "text", text: `Error occurred: ${error}` }],
       };
     }
+  } else if (name === "get_aws_kb_retrieval_server_aztp_identity") {
+    try {
+      if (!securedAgent) {
+        return {
+          content: [{ type: "text", text: "Server identity not yet established" }],
+          isError: true,
+        };
+      }
+      return {
+        content: [{ type: "text", text: securedAgent.identity.aztpId }],
+      };
+    } catch (error) {
+      return {
+        content: [{ type: "text", text: `Error retrieving server identity: ${error}` }],
+        isError: true,
+      };
+    }
   } else {
     return {
       content: [{ type: "text", text: `Unknown tool: ${name}` }],
@@ -154,10 +207,30 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 });
 
 // Server startup
+let securedAgent: Awaited<ReturnType<typeof aztpClient.secureConnect>> | null = null;
+
 async function runServer() {
   const transport = new StdioServerTransport();
   await server.connect(transport);
   console.error("AWS KB Retrieval Server running on stdio");
+
+  const metadata: MetadataType = {
+    isGlobalIdentity: false
+  };
+
+  if (trustDomain) { metadata.trustDomain = trustDomain; }
+
+  if (linkTo) { metadata.linkTo = [linkTo]; }
+
+  if (parentIdentity) { metadata.parentIdentity = parentIdentity; }
+
+  const securedAgent = await aztpClient.secureConnect(server, mcpName, metadata);
+
+  console.error("AZTP secured connection to AWS KB Retrieval Server");
+
+  if (!securedAgent.identity.verify) {
+    throw new Error("Invalid identity");
+  }
 }
 
 runServer().catch((error) => {

@@ -49,30 +49,6 @@ To authenticate and save credentials:
 
 To integrate this server with the desktop app, add the following to your app's server configuration:
 
-#### Docker
-
-Authentication:
-
-Assuming you have completed setting up the OAuth application on Google Cloud, you can now auth the server with the following command, replacing `/path/to/gcp-oauth.keys.json` with the path to your OAuth keys file:
-
-```bash
-docker run -i --rm --mount type=bind,source=/path/to/gcp-oauth.keys.json,target=/gcp-oauth.keys.json -v mcp-gdrive:/gdrive-server -e GDRIVE_OAUTH_PATH=/gcp-oauth.keys.json -e "GDRIVE_CREDENTIALS_PATH=/gdrive-server/credentials.json" -p 3000:3000 mcp/gdrive auth
-```
-
-The command will print the URL to open in your browser. Open this URL in your browser and complete the authentication process. The credentials will be saved in the `mcp-gdrive` volume.
-
-Once authenticated, you can use the server in your app's server configuration:
-
-```json
-{
-  "mcpServers": {
-    "gdrive": {
-      "command": "docker",
-      "args": ["run", "-i", "--rm", "-v", "mcp-gdrive:/gdrive-server", "-e", "GDRIVE_CREDENTIALS_PATH=/gdrive-server/credentials.json", "mcp/gdrive"]
-    }
-  }
-}
-```
 
 #### NPX
 
@@ -80,15 +56,30 @@ Once authenticated, you can use the server in your app's server configuration:
 {
   "mcpServers": {
     "gdrive": {
-      "command": "npx",
+      "command": "node",
       "args": [
-        "-y",
-        "@modelcontextprotocol/server-gdrive"
-      ]
+        "/path/to/gdrive/project/dist/index.js"
+      ],
+      "env": {
+        "AZTP_IDENTITY_NAME": "your_key_here",
+        "AZTP_API_KEY": "your_key_here",
+        "AZTP_LINK_TO": ["aztp_link_here", "aztp_link_here"],
+        "AZTP_PARENT_IDENTITY": "aztp_link_here",
+        "AZTP_TRUST_DOMAIN": "your_domain_here"
+      }
     }
   }
 }
 ```
+
+## Where to Get an AZTP API Key
+
+1. Register at [https://www.astha.ai/](https://www.astha.ai/)
+2. Generate your API key
+3. To get a **FREE** identity:
+   - Add your desired domain
+   - Follow the verification process
+4. Set your domain as the default
 
 ## License
 

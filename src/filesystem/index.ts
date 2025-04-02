@@ -14,6 +14,7 @@ import { z } from "zod";
 import { zodToJsonSchema } from "zod-to-json-schema";
 import { diffLines, createTwoFilesPatch } from 'diff';
 import { minimatch } from 'minimatch';
+import aztp from "aztp-client";
 
 // Command line argument parsing
 const args = process.argv.slice(2);
@@ -172,6 +173,29 @@ const server = new Server(
   },
 );
 
+const aztpApiKey = process.env.AZTP_API_KEY;
+if (!aztpApiKey) throw new Error("AZTP_API_KEY is required");
+
+// Initialize the AZTP client
+const aztpClient = aztp.default.initialize({
+  apiKey: aztpApiKey,
+});
+
+const mcpName = process.env.AZTP_IDENTITY_NAME as string;
+if (!mcpName) throw new Error("AZTP_IDENTITY_NAME is required");
+
+const linkTo = process.env.AZTP_LINK_TO as string | null;
+const parentIdentity = process.env.AZTP_PARENT_IDENTITY as string | null;
+const trustDomain = process.env.AZTP_TRUST_DOMAIN as string | null;
+
+interface MetadataType {
+  isGlobalIdentity: boolean;
+  trustDomain?: string;
+  linkTo?: string[];
+  parentIdentity?: string;
+}
+
+
 // Tool implementations
 async function getFileStats(filePath: string): Promise<FileInfo> {
   const stats = await fs.stat(filePath);
@@ -254,7 +278,7 @@ function createUnifiedDiff(originalContent: string, newContent: string, filepath
 
 async function applyFileEdits(
   filePath: string,
-  edits: Array<{oldText: string, newText: string}>,
+  edits: Array<{ oldText: string, newText: string }>,
   dryRun = false
 ): Promise<string> {
   // Read file content and normalize line endings
@@ -390,10 +414,10 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       {
         name: "directory_tree",
         description:
-            "Get a recursive tree view of files and directories as a JSON structure. " +
-            "Each entry includes 'name', 'type' (file/directory), and 'children' for directories. " +
-            "Files have no children array, while directories always have a children array (which may be empty). " +
-            "The output is formatted with 2-space indentation for readability. Only works within allowed directories.",
+          "Get a recursive tree view of files and directories as a JSON structure. " +
+          "Each entry includes 'name', 'type' (file/directory), and 'children' for directories. " +
+          "Files have no children array, while directories always have a children array (which may be empty). " +
+          "The output is formatted with 2-space indentation for readability. Only works within allowed directories.",
         inputSchema: zodToJsonSchema(DirectoryTreeArgsSchema) as ToolInput,
       },
       {
@@ -429,6 +453,17 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
         description:
           "Returns the list of directories that this server is allowed to access. " +
           "Use this to understand which directories are available before trying to access files.",
+        inputSchema: {
+          type: "object",
+          properties: {},
+          required: [],
+        },
+      },
+      {
+        name: "get_filesystem_aztp_identity",
+        description:
+          "Returns the AZTP identity information for this filesystem server. " +
+          "Use this to understand the server's identity and verification status.",
         inputSchema: {
           type: "object",
           properties: {},
@@ -530,48 +565,48 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         };
       }
 
-        case "directory_tree": {
-            const parsed = DirectoryTreeArgsSchema.safeParse(args);
-            if (!parsed.success) {
-                throw new Error(`Invalid arguments for directory_tree: ${parsed.error}`);
-            }
-
-            interface TreeEntry {
-                name: string;
-                type: 'file' | 'directory';
-                children?: TreeEntry[];
-            }
-
-            async function buildTree(currentPath: string): Promise<TreeEntry[]> {
-                const validPath = await validatePath(currentPath);
-                const entries = await fs.readdir(validPath, {withFileTypes: true});
-                const result: TreeEntry[] = [];
-
-                for (const entry of entries) {
-                    const entryData: TreeEntry = {
-                        name: entry.name,
-                        type: entry.isDirectory() ? 'directory' : 'file'
-                    };
-
-                    if (entry.isDirectory()) {
-                        const subPath = path.join(currentPath, entry.name);
-                        entryData.children = await buildTree(subPath);
-                    }
-
-                    result.push(entryData);
-                }
-
-                return result;
-            }
-
-            const treeData = await buildTree(parsed.data.path);
-            return {
-                content: [{
-                    type: "text",
-                    text: JSON.stringify(treeData, null, 2)
-                }],
-            };
+      case "directory_tree": {
+        const parsed = DirectoryTreeArgsSchema.safeParse(args);
+        if (!parsed.success) {
+          throw new Error(`Invalid arguments for directory_tree: ${parsed.error}`);
         }
+
+        interface TreeEntry {
+          name: string;
+          type: 'file' | 'directory';
+          children?: TreeEntry[];
+        }
+
+        async function buildTree(currentPath: string): Promise<TreeEntry[]> {
+          const validPath = await validatePath(currentPath);
+          const entries = await fs.readdir(validPath, { withFileTypes: true });
+          const result: TreeEntry[] = [];
+
+          for (const entry of entries) {
+            const entryData: TreeEntry = {
+              name: entry.name,
+              type: entry.isDirectory() ? 'directory' : 'file'
+            };
+
+            if (entry.isDirectory()) {
+              const subPath = path.join(currentPath, entry.name);
+              entryData.children = await buildTree(subPath);
+            }
+
+            result.push(entryData);
+          }
+
+          return result;
+        }
+
+        const treeData = await buildTree(parsed.data.path);
+        return {
+          content: [{
+            type: "text",
+            text: JSON.stringify(treeData, null, 2)
+          }],
+        };
+      }
 
       case "move_file": {
         const parsed = MoveFileArgsSchema.safeParse(args);
@@ -606,9 +641,11 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         const validPath = await validatePath(parsed.data.path);
         const info = await getFileStats(validPath);
         return {
-          content: [{ type: "text", text: Object.entries(info)
-            .map(([key, value]) => `${key}: ${value}`)
-            .join("\n") }],
+          content: [{
+            type: "text", text: Object.entries(info)
+              .map(([key, value]) => `${key}: ${value}`)
+              .join("\n")
+          }],
         };
       }
 
@@ -617,6 +654,16 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           content: [{
             type: "text",
             text: `Allowed directories:\n${allowedDirectories.join('\n')}`
+          }],
+        };
+      }
+
+      case "get_filesystem_aztp_identity": {
+        const identity = await aztpClient.getIdentity(server);
+        return {
+          content: [{
+            type: "text",
+            text: JSON.stringify(identity, null, 2)
           }],
         };
       }
@@ -639,6 +686,24 @@ async function runServer() {
   await server.connect(transport);
   console.error("Secure MCP Filesystem Server running on stdio");
   console.error("Allowed directories:", allowedDirectories);
+
+  const metadata: MetadataType = {
+    isGlobalIdentity: false
+  };
+
+  if (trustDomain) { metadata.trustDomain = trustDomain; }
+
+  if (linkTo) { metadata.linkTo = [linkTo]; }
+
+  if (parentIdentity) { metadata.parentIdentity = parentIdentity; }
+
+  const securedAgent = await aztpClient.secureConnect(server, mcpName, metadata);
+
+  console.error("AZTP secured connection to Filesystem MCP Server");
+
+  if (!securedAgent.identity.verify) {
+    throw new Error("Invalid identity");
+  }
 }
 
 runServer().catch((error) => {

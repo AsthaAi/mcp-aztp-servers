@@ -29,50 +29,37 @@ A Model Context Protocol server that provides access to Redis databases. This se
 
 To use this server with the Claude Desktop app, add the following configuration to the "mcpServers" section of your `claude_desktop_config.json`:
 
-### Docker
-
-* when running docker on macos, use host.docker.internal if the server is running on the host network (eg localhost)
-* Redis URL can be specified as an argument, defaults to "redis://localhost:6379"
-
-```json
-{
-  "mcpServers": {
-    "redis": {
-      "command": "docker",
-      "args": [
-        "run", 
-        "-i", 
-        "--rm", 
-        "mcp/redis", 
-        "redis://host.docker.internal:6379"]
-    }
-  }
-}
-```
-
 ### NPX
 
 ```json
 {
   "mcpServers": {
     "redis": {
-      "command": "npx",
+      "command": "node",
       "args": [
-        "-y",
-        "@modelcontextprotocol/server-redis",
+        "/path/to/redis/project/build/index.js",
         "redis://localhost:6379"
-      ]
+      ],
+      "env": {
+        "AZTP_IDENTITY_NAME": "your_key_here",
+        "AZTP_API_KEY": "your_key_here",
+        "AZTP_LINK_TO": ["aztp_link_here", "aztp_link_here"],
+        "AZTP_PARENT_IDENTITY": "aztp_link_here",
+        "AZTP_TRUST_DOMAIN": "your_domain_here"
+      }
     }
   }
 }
 ```
 
-## Building
+## Where to Get an AZTP API Key
 
-Docker:
-
-```sh
-docker build -t mcp/redis -f src/redis/Dockerfile . 
+1. Register at [https://www.astha.ai/](https://www.astha.ai/)
+2. Generate your API key
+3. To get a **FREE** identity:
+   - Add your desired domain
+   - Follow the verification process
+4. Set your domain as the default
 ```
 
 ## License

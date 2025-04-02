@@ -11,14 +11,6 @@ import aztp from "aztp-client";
 import EverArt from "everart";
 import open from "open";
 
-interface Identity {
-  server: Server;
-  identity: {
-    verify: boolean;
-    aztpId: string;
-  };
-}
-
 const server = new Server(
   {
     name: "example-servers/everart",
@@ -36,6 +28,30 @@ if (!process.env.EVERART_API_KEY) {
   console.error("EVERART_API_KEY environment variable is not set");
   process.exit(1);
 }
+
+
+const aztpApiKey = process.env.AZTP_API_KEY;
+if (!aztpApiKey) throw new Error("AZTP_API_KEY is required");
+
+// Initialize the AZTP client
+const aztpClient = aztp.default.initialize({
+  apiKey: aztpApiKey,
+});
+
+const mcpName = process.env.AZTP_IDENTITY_NAME as string;
+if (!mcpName) throw new Error("AZTP_IDENTITY_NAME is required");
+
+const linkTo = process.env.AZTP_LINK_TO as string | null;
+const parentIdentity = process.env.AZTP_PARENT_IDENTITY as string | null;
+const trustDomain = process.env.AZTP_TRUST_DOMAIN as string | null;
+
+interface MetadataType {
+  isGlobalIdentity: boolean;
+  trustDomain?: string;
+  linkTo?: string[];
+  parentIdentity?: string;
+}
+
 
 const client = new EverArt.default(process.env.EVERART_API_KEY);
 
@@ -86,8 +102,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
   ],
 }));
 
-// Global variable for aztpClient
-let aztpClient: any;
+
 
 server.setRequestHandler(ListResourcesRequestSchema, async () => {
   return {
@@ -168,16 +183,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     }
   }
 
-  if (request.params.name === "get_aztp_identity") {
+  if (request.params.name === "get_everart_aztp_identity") {
     try {
-      const aztpApiKey = process.env.AZTP_API_KEY;
-      if (!aztpApiKey) throw new Error("AZTP_API_KEY is required");
-
-      // Initialize the AZTP client
-      const aztpClient = aztp.default.initialize({
-        apiKey: aztpApiKey,
-      });
-
       console.log("Received get_aztp_identity request");
 
       if (!aztpClient) {
@@ -208,65 +215,30 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   throw new Error(`Unknown tool: ${request.params.name}`);
 });
 
-// Aztp
-async function aztpInit(server: any): Promise<Identity> {
-  const aztpApiKey = process.env.AZTP_API_KEY;
-  if (!aztpApiKey) throw new Error("AZTP_API_KEY is required");
 
-  // Initialize the AZTP client
-  const aztpClient = aztp.default.initialize({
-    apiKey: aztpApiKey,
-  });
-
-  const mcpName = process.env.AZTP_IDENTITY_NAME as string;
-  if (!mcpName) throw new Error("AZTP_IDENTITY_NAME is required");
-
-
-
-  const linkTo = process.env.AZTP_LINK_TO as string | null;
-  const parentIdentity = process.env.AZTP_PARENT_IDENTITY as string | null;
-  const trustDomain = process.env.AZTP_TRUST_DOMAIN as string | null;
-
-  // Secure the server identity
-  interface MetadataType {
-    isGlobalIdentity: boolean;
-    trustDomain?: string;
-    linkTo?: string[];
-    parentIdentity?: string;
-  }
-
-  console.log("mcpName:", mcpName);
+async function runServer() {
+  const transport = new StdioServerTransport();
+  await server.connect(transport);
+  console.error("EverArt MCP Server running on stdio");
 
   const metadata: MetadataType = {
     isGlobalIdentity: false
   };
 
-  if (trustDomain) {
-    metadata.trustDomain = trustDomain;
-  }
+  if (trustDomain) { metadata.trustDomain = trustDomain; }
 
-  if (linkTo) {
-    metadata.linkTo = [linkTo];
-  }
+  if (linkTo) { metadata.linkTo = [linkTo]; }
 
-  if (parentIdentity) {
-    metadata.parentIdentity = parentIdentity;
-  }
+  if (parentIdentity) { metadata.parentIdentity = parentIdentity; }
 
   const securedAgent = await aztpClient.secureConnect(server, mcpName, metadata);
 
-  return securedAgent;
-}
+  console.error("AZTP secured connection to EverArt MCP Server");
 
-async function runServer() {
-  const transport = new StdioServerTransport();
-  const serverConnected = await server.connect(transport);
-  console.error("EverArt MCP Server running on stdio");
-
-  const secureIdentity = await aztpInit(server);
-  if (!secureIdentity.identity.verify) {
+  if (!securedAgent.identity.verify) {
     throw new Error("Invalid identity");
   }
+
 }
 
 runServer().catch(console.error);

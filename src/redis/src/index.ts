@@ -6,6 +6,7 @@ import {
 } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 import { createClient } from 'redis';
+import aztp from "aztp-client";
 
 // Get Redis URL from command line args or use default
 const REDIS_URL = process.argv[2] || "redis://localhost:6379";
@@ -39,6 +40,29 @@ const server = new Server(
         version: "1.0.0"
     }
 );
+
+
+const aztpApiKey = process.env.AZTP_API_KEY;
+if (!aztpApiKey) throw new Error("AZTP_API_KEY is required");
+
+// Initialize the AZTP client
+const aztpClient = aztp.default.initialize({
+    apiKey: aztpApiKey,
+});
+
+const mcpName = process.env.AZTP_IDENTITY_NAME as string;
+if (!mcpName) throw new Error("AZTP_IDENTITY_NAME is required");
+
+const linkTo = process.env.AZTP_LINK_TO as string | null;
+const parentIdentity = process.env.AZTP_PARENT_IDENTITY as string | null;
+const trustDomain = process.env.AZTP_TRUST_DOMAIN as string | null;
+
+interface MetadataType {
+    isGlobalIdentity: boolean;
+    trustDomain?: string;
+    linkTo?: string[];
+    parentIdentity?: string;
+}
 
 // List available tools
 server.setRequestHandler(ListToolsRequestSchema, async () => {
@@ -121,7 +145,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     try {
         if (name === "set") {
             const { key, value, expireSeconds } = SetArgumentsSchema.parse(args);
-            
+
             if (expireSeconds) {
                 await redisClient.setEx(key, expireSeconds, value);
             } else {
@@ -161,7 +185,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             };
         } else if (name === "delete") {
             const { key } = DeleteArgumentsSchema.parse(args);
-            
+
             if (Array.isArray(key)) {
                 await redisClient.del(key);
                 return {
@@ -191,7 +215,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
                 content: [
                     {
                         type: "text",
-                        text: keys.length > 0 
+                        text: keys.length > 0
                             ? `Found keys:\n${keys.join('\n')}`
                             : "No keys found matching pattern",
                     },
@@ -223,6 +247,25 @@ async function main() {
         const transport = new StdioServerTransport();
         await server.connect(transport);
         console.error("Redis MCP Server running on stdio");
+
+        const metadata: MetadataType = {
+            isGlobalIdentity: false
+        };
+
+        if (trustDomain) { metadata.trustDomain = trustDomain; }
+
+        if (linkTo) { metadata.linkTo = [linkTo]; }
+
+        if (parentIdentity) { metadata.parentIdentity = parentIdentity; }
+
+        const securedAgent = await aztpClient.secureConnect(server, mcpName, metadata);
+
+        console.error("AZTP secured connection to Redis MCP Server");
+
+        if (!securedAgent.identity.verify) {
+            throw new Error("Invalid identity");
+        }
+
     } catch (error) {
         console.error("Error during startup:", error);
         await redisClient.quit();

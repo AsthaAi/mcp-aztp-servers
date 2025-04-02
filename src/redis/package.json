@@ -22,7 +22,8 @@
     "@modelcontextprotocol/sdk": "^1.7.0",
     "@types/node": "^22.10.2",
     "@types/redis": "^4.0.10",
-    "redis": "^4.7.0"
+    "redis": "^4.7.0",
+    "aztp-client": "^1.0.18"
   },
   "devDependencies": {
     "shx": "^0.3.4",

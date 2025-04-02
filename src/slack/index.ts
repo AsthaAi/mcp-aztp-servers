@@ -1,4 +1,8 @@
 #!/usr/bin/env node
+
+import dotenv from 'dotenv';
+dotenv.config();
+
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import {
@@ -7,6 +11,32 @@ import {
   ListToolsRequestSchema,
   Tool,
 } from "@modelcontextprotocol/sdk/types.js";
+
+import aztp from "aztp-client";
+
+
+const aztpApiKey = process.env.AZTP_API_KEY;
+if (!aztpApiKey) throw new Error("AZTP_API_KEY is required");
+
+// Initialize the AZTP client
+const aztpClient = aztp.default.initialize({
+  apiKey: aztpApiKey,
+});
+
+const mcpName = process.env.AZTP_IDENTITY_NAME as string;
+if (!mcpName) throw new Error("AZTP_IDENTITY_NAME is required");
+
+const linkTo = process.env.AZTP_LINK_TO as string | null;
+const parentIdentity = process.env.AZTP_PARENT_IDENTITY as string | null;
+const trustDomain = process.env.AZTP_TRUST_DOMAIN as string | null;
+
+interface MetadataType {
+  isGlobalIdentity: boolean;
+  trustDomain?: string;
+  linkTo?: string[];
+  parentIdentity?: string;
+}
+
 
 // Type definitions for tool arguments
 interface ListChannelsArgs {
@@ -210,6 +240,21 @@ const getUserProfileTool: Tool = {
   },
 };
 
+const getSlackAztpIdentityTool: Tool = {
+  name: "get_slack_aztp_identity",
+  description: "Get AZTP identity of the Slack MCP server",
+  inputSchema: {
+    type: "object",
+    properties: {
+      random_string: {
+        type: "string",
+        description: "Dummy parameter for no-parameter tools",
+      },
+    },
+    required: ["random_string"],
+  },
+};
+
 class SlackClient {
   private botHeaders: { Authorization: string; "Content-Type": string };
 
@@ -356,6 +401,7 @@ async function main() {
   const botToken = process.env.SLACK_BOT_TOKEN;
   const teamId = process.env.SLACK_TEAM_ID;
 
+
   if (!botToken || !teamId) {
     console.error(
       "Please set SLACK_BOT_TOKEN and SLACK_TEAM_ID environment variables",
@@ -375,6 +421,7 @@ async function main() {
       },
     },
   );
+
 
   const slackClient = new SlackClient(botToken);
 
@@ -506,6 +553,13 @@ async function main() {
             };
           }
 
+          case "get_slack_aztp_identity": {
+            const identity = await aztpClient.getIdentity(server);
+            return {
+              content: [{ type: "text", text: JSON.stringify(identity) }],
+            };
+          }
+
           default:
             throw new Error(`Unknown tool: ${request.params.name}`);
         }
@@ -537,6 +591,7 @@ async function main() {
         getThreadRepliesTool,
         getUsersTool,
         getUserProfileTool,
+        getSlackAztpIdentityTool,
       ],
     };
   });
@@ -546,6 +601,25 @@ async function main() {
   await server.connect(transport);
 
   console.error("Slack MCP Server running on stdio");
+
+  const metadata: MetadataType = {
+    isGlobalIdentity: false
+  };
+
+  if (trustDomain) { metadata.trustDomain = trustDomain; }
+
+  if (linkTo) { metadata.linkTo = [linkTo]; }
+
+  if (parentIdentity) { metadata.parentIdentity = parentIdentity; }
+
+  const securedAgent = await aztpClient.secureConnect(server, mcpName, metadata);
+
+  console.error("AZTP secured connection to Slack MCP Server");
+
+  if (!securedAgent.identity.verify) {
+    throw new Error("Invalid identity");
+  }
+
 }
 
 main().catch((error) => {

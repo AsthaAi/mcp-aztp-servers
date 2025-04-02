@@ -20,6 +20,7 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "1.0.1",
+    "aztp-client": "1.0.18",
     "puppeteer": "^23.4.0"
   },
   "devDependencies": {

@@ -27,50 +27,39 @@ An MCP server implementation for retrieving information from the AWS Knowledge B
 
 Add this to your `claude_desktop_config.json`:
 
-#### Docker
 
 ```json
 {
   "mcpServers": {
     "aws-kb-retrieval": {
-      "command": "docker",
-      "args": [ "run", "-i", "--rm", "-e", "AWS_ACCESS_KEY_ID", "-e", "AWS_SECRET_ACCESS_KEY", "-e", "AWS_REGION", "mcp/aws-kb-retrieval-server" ],
-      "env": {
-        "AWS_ACCESS_KEY_ID": "YOUR_ACCESS_KEY_HERE",
-        "AWS_SECRET_ACCESS_KEY": "YOUR_SECRET_ACCESS_KEY_HERE",
-        "AWS_REGION": "YOUR_AWS_REGION_HERE"
-      }
-    }
-  }
-}
-```
-
-```json
-{
-  "mcpServers": {
-    "aws-kb-retrieval": {
-      "command": "npx",
+      "command": "node",
       "args": [
-        "-y",
-        "@modelcontextprotocol/server-aws-kb-retrieval"
+        "/path/to/aws-kb-retrieval-server/project/dist/index.js"
       ],
       "env": {
         "AWS_ACCESS_KEY_ID": "YOUR_ACCESS_KEY_HERE",
         "AWS_SECRET_ACCESS_KEY": "YOUR_SECRET_ACCESS_KEY_HERE",
-        "AWS_REGION": "YOUR_AWS_REGION_HERE"
+        "AWS_REGION": "YOUR_AWS_REGION_HERE",
+        "AZTP_IDENTITY_NAME": "your_key_here",
+        "AZTP_API_KEY": "your_key_here",
+        "AZTP_LINK_TO": ["aztp_link_here", "aztp_link_here"],
+        "AZTP_PARENT_IDENTITY": "aztp_link_here",
+        "AZTP_TRUST_DOMAIN": "your_domain_here"
       }
     }
   }
 }
 ```
 
-## Building
+## Where to Get an AZTP API Key
 
-Docker: 
+1. Register at [https://www.astha.ai/](https://www.astha.ai/)
+2. Generate your API key
+3. To get a **FREE** identity:
+   - Add your desired domain
+   - Follow the verification process
+4. Set your domain as the default
 
-```sh
-docker build -t mcp/aws-kb-retrieval -f src/aws-kb-retrieval-server/Dockerfile . 
-```
 
 ## License
 

@@ -89,46 +89,24 @@ MCP Server for the Slack API, enabling Claude to interact with Slack workspaces.
 
 Add the following to your `claude_desktop_config.json`:
 
-#### npx
+#### node
 
 ```json
 {
   "mcpServers": {
     "slack": {
-      "command": "npx",
+      "command": "node",
       "args": [
-        "-y",
-        "@modelcontextprotocol/server-slack"
+        "/path/to/slack/project/dist/index.js"
       ],
       "env": {
         "SLACK_BOT_TOKEN": "xoxb-your-bot-token",
-        "SLACK_TEAM_ID": "T01234567"
-      }
-    }
-  }
-}
-```
-
-#### docker
-
-```json
-{
-  "mcpServers": {
-    "slack": {
-      "command": "docker",
-      "args": [
-        "run",
-        "-i",
-        "--rm",
-        "-e",
-        "SLACK_BOT_TOKEN",
-        "-e",
-        "SLACK_TEAM_ID",
-        "mcp/slack"
-      ],
-      "env": {
-        "SLACK_BOT_TOKEN": "xoxb-your-bot-token",
-        "SLACK_TEAM_ID": "T01234567"
+        "SLACK_TEAM_ID": "T01234567",
+        "AZTP_IDENTITY_NAME": "your_key_here",
+        "AZTP_API_KEY": "your_key_here",
+        "AZTP_LINK_TO": ["aztp_link_here", "aztp_link_here"],
+        "AZTP_PARENT_IDENTITY": "aztp_link_here",
+        "AZTP_TRUST_DOMAIN": "your_domain_here"
       }
     }
   }
@@ -143,13 +121,15 @@ If you encounter permission errors, verify that:
 3. The tokens and workspace ID are correctly copied to your configuration
 4. The app has been added to the channels it needs to access
 
-## Build
 
-Docker build:
+## Where to Get an AZTP API Key
 
-```bash
-docker build -t mcp/slack -f src/slack/Dockerfile .
-```
+1. Register at [https://www.astha.ai/](https://www.astha.ai/)
+2. Generate your API key
+3. To get a **FREE** identity:
+   - Add your desired domain
+   - Follow the verification process
+4. Set your domain as the default
 
 ## License
 

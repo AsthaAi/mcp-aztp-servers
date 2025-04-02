@@ -13,6 +13,7 @@ import {
   Tool,
 } from "@modelcontextprotocol/sdk/types.js";
 import puppeteer, { Browser, Page } from "puppeteer";
+import aztp from "aztp-client";
 
 // Define the tools once to avoid repetition
 const TOOLS: Tool[] = [
@@ -98,6 +99,15 @@ const TOOLS: Tool[] = [
       required: ["script"],
     },
   },
+  {
+    name: "puppeteer_get_aztp_identity",
+    description: "Get the AZTP identity information for puppeteer mcp server",
+    inputSchema: {
+      type: "object",
+      properties: {},
+      required: [],
+    },
+  },
 ];
 
 // Global state
@@ -109,8 +119,8 @@ const screenshots = new Map<string, string>();
 async function ensureBrowser() {
   if (!browser) {
     const npx_args = { headless: false }
-    const docker_args = { headless: true, args: ["--no-sandbox", "--single-process", "--no-zygote"] }
-    browser = await puppeteer.launch(process.env.DOCKER_CONTAINER ? docker_args : npx_args);
+    // const docker_args = { headless: true, args: ["--no-sandbox", "--single-process", "--no-zygote"] }
+    browser = await puppeteer.launch(npx_args);
     const pages = await browser.pages();
     page = pages[0];
 
@@ -285,15 +295,15 @@ async function handleToolCall(name: string, args: any): Promise<CallToolResult> 
               window.mcpHelper.logs.push(`[${method}] ${args.join(' ')}`);
               (window.mcpHelper.originalConsole as any)[method](...args);
             };
-          } );
-        } );
+          });
+        });
 
-        const result = await page.evaluate( args.script );
+        const result = await page.evaluate(args.script);
 
         const logs = await page.evaluate(() => {
           Object.assign(console, window.mcpHelper.originalConsole);
           const logs = window.mcpHelper.logs;
-          delete ( window as any).mcpHelper;
+          delete (window as any).mcpHelper;
           return logs;
         });
 
@@ -311,6 +321,26 @@ async function handleToolCall(name: string, args: any): Promise<CallToolResult> 
           content: [{
             type: "text",
             text: `Script execution failed: ${(error as Error).message}`,
+          }],
+          isError: true,
+        };
+      }
+
+    case "puppeteer_get_aztp_identity":
+      try {
+        const identity = await aztpClient.getIdentity(server);
+        return {
+          content: [{
+            type: "text",
+            text: JSON.stringify(identity, null, 2),
+          }],
+          isError: false,
+        };
+      } catch (error) {
+        return {
+          content: [{
+            type: "text",
+            text: `Failed to get AZTP identity: ${(error as Error).message}`,
           }],
           isError: true,
         };
@@ -339,6 +369,30 @@ const server = new Server(
     },
   },
 );
+
+
+const aztpApiKey = process.env.AZTP_API_KEY;
+if (!aztpApiKey) throw new Error("AZTP_API_KEY is required");
+
+// Initialize the AZTP client
+const aztpClient = aztp.default.initialize({
+  apiKey: aztpApiKey,
+});
+
+const mcpName = process.env.AZTP_IDENTITY_NAME as string;
+if (!mcpName) throw new Error("AZTP_IDENTITY_NAME is required");
+
+const linkTo = process.env.AZTP_LINK_TO as string | null;
+const parentIdentity = process.env.AZTP_PARENT_IDENTITY as string | null;
+const trustDomain = process.env.AZTP_TRUST_DOMAIN as string | null;
+
+interface MetadataType {
+  isGlobalIdentity: boolean;
+  trustDomain?: string;
+  linkTo?: string[];
+  parentIdentity?: string;
+}
+
 
 
 // Setup request handlers
@@ -398,6 +452,25 @@ server.setRequestHandler(CallToolRequestSchema, async (request) =>
 async function runServer() {
   const transport = new StdioServerTransport();
   await server.connect(transport);
+  console.error("Puppeteer MCP Server starting...");
+
+  const metadata: MetadataType = {
+    isGlobalIdentity: false
+  };
+
+  if (trustDomain) { metadata.trustDomain = trustDomain; }
+
+  if (linkTo) { metadata.linkTo = [linkTo]; }
+
+  if (parentIdentity) { metadata.parentIdentity = parentIdentity; }
+
+  const securedAgent = await aztpClient.secureConnect(server, mcpName, metadata);
+
+  console.error("AZTP secured connection to Puppeteer MCP Server");
+
+  if (!securedAgent.identity.verify) {
+    throw new Error("Invalid identity");
+  }
 }
 
 runServer().catch(console.error);

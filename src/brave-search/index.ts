@@ -9,13 +9,6 @@ import {
 } from "@modelcontextprotocol/sdk/types.js";
 import aztp from "aztp-client";
 
-interface Identity {
-  server: Server;
-  identity: {
-    valid: boolean;
-    aztpId: string;
-  };
-}
 
 const WEB_SEARCH_TOOL: Tool = {
   name: "brave_web_search",
@@ -74,6 +67,15 @@ const LOCAL_SEARCH_TOOL: Tool = {
   },
 };
 
+const GET_AZTP_IDENTITY_TOOL: Tool = {
+  name: "get_brave_search_aztp_identity",
+  description: "Get AZTP identity of the Brave Search MCP server. This is used to secure the connection between the Brave Search MCP server and the AZTP server.",
+  inputSchema: {
+    type: "object",
+    properties: {},
+  },
+};
+
 // Server implementation
 const server = new Server(
   {
@@ -92,6 +94,28 @@ const BRAVE_API_KEY = process.env.BRAVE_API_KEY!;
 if (!BRAVE_API_KEY) {
   console.error("Error: BRAVE_API_KEY environment variable is required");
   process.exit(1);
+}
+
+const aztpApiKey = process.env.AZTP_API_KEY;
+if (!aztpApiKey) throw new Error("AZTP_API_KEY is required");
+
+// Initialize the AZTP client
+const aztpClient = aztp.default.initialize({
+  apiKey: aztpApiKey,
+});
+
+const mcpName = process.env.AZTP_IDENTITY_NAME as string;
+if (!mcpName) throw new Error("AZTP_IDENTITY_NAME is required");
+
+const linkTo = process.env.AZTP_LINK_TO as string | null;
+const parentIdentity = process.env.AZTP_PARENT_IDENTITY as string | null;
+const trustDomain = process.env.AZTP_TRUST_DOMAIN as string | null;
+
+interface MetadataType {
+  isGlobalIdentity: boolean;
+  trustDomain?: string;
+  linkTo?: string[];
+  parentIdentity?: string;
 }
 
 const RATE_LIMIT = {
@@ -351,12 +375,32 @@ Description: ${descData.descriptions[poi.id] || "No description available"}
 
 // Tool handlers
 server.setRequestHandler(ListToolsRequestSchema, async () => ({
-  tools: [WEB_SEARCH_TOOL, LOCAL_SEARCH_TOOL],
+  tools: [WEB_SEARCH_TOOL, LOCAL_SEARCH_TOOL, GET_AZTP_IDENTITY_TOOL],
 }));
 
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
   try {
     const { name, arguments: args } = request.params;
+
+    if (name === "get_brave_search_aztp_identity") {
+      try {
+        if (!aztpClient) {
+          throw new Error("AZTP client not initialized");
+        }
+
+        const identity = await aztpClient.getIdentity(server);
+
+        return {
+          content: [{ type: "text", text: JSON.stringify(identity, null, 2) }],
+          isError: false,
+        };
+      } catch (error) {
+        return {
+          content: [{ type: "text", text: `Error getting identity: ${error instanceof Error ? error.message : String(error)}` }],
+          isError: true,
+        };
+      }
+    }
 
     if (!args) {
       throw new Error("No arguments provided");
@@ -406,33 +450,26 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   }
 });
 
-// Aztp
-async function aztpInit(server: any): Promise<Identity> {
-  const aztpApiKey = process.env.AZTP_API_KEY;
-  if (!aztpApiKey) throw new Error("AZTP_API_KEY is required");
-
-  const aztpIdentityName = process.env.AZTP_IDENTITY_NAME as string;
-  if (!aztpIdentityName) throw new Error("AZTP_IDENTITY_NAME is required");
-
-  // Initialize the AZTP client
-  const aztpClient = aztp.default.initialize({
-    apiKey: aztpApiKey,
-  });
-
-  const identity = await aztpClient.secureConnect(server, aztpIdentityName, {
-    isGlobalIdentity: false,
-  });
-
-  return identity;
-}
+let securedAgent;
 
 async function runServer() {
   const transport = new StdioServerTransport();
-  const serverConnected = await server.connect(transport);
+  await server.connect(transport);
   console.error("Brave Search MCP Server running on stdio");
 
-  const secureIdentity = await aztpInit(serverConnected);
-  if (!secureIdentity.identity.valid) {
+  const metadata: MetadataType = {
+    isGlobalIdentity: false
+  };
+
+  if (trustDomain) { metadata.trustDomain = trustDomain; }
+
+  if (linkTo) { metadata.linkTo = [linkTo]; }
+
+  if (parentIdentity) { metadata.parentIdentity = parentIdentity; }
+
+  securedAgent = await aztpClient.secureConnect(server, mcpName, metadata);
+
+  if (!securedAgent.identity.verify) {
     throw new Error("Invalid identity");
   }
 }

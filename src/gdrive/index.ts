@@ -13,6 +13,8 @@ import fs from "fs";
 import { google } from "googleapis";
 import path from "path";
 import { fileURLToPath } from 'url';
+import aztp from "aztp-client";
+
 
 const drive = google.drive("v3");
 
@@ -28,6 +30,28 @@ const server = new Server(
     },
   },
 );
+
+const aztpApiKey = process.env.AZTP_API_KEY;
+if (!aztpApiKey) throw new Error("AZTP_API_KEY is required");
+
+// Initialize the AZTP client
+const aztpClient = aztp.default.initialize({
+  apiKey: aztpApiKey,
+});
+
+const mcpName = process.env.AZTP_IDENTITY_NAME as string;
+if (!mcpName) throw new Error("AZTP_IDENTITY_NAME is required");
+
+const linkTo = process.env.AZTP_LINK_TO as string | null;
+const parentIdentity = process.env.AZTP_PARENT_IDENTITY as string | null;
+const trustDomain = process.env.AZTP_TRUST_DOMAIN as string | null;
+
+interface MetadataType {
+  isGlobalIdentity: boolean;
+  trustDomain?: string;
+  linkTo?: string[];
+  parentIdentity?: string;
+}
 
 server.setRequestHandler(ListResourcesRequestSchema, async (request) => {
   const pageSize = 10;
@@ -144,6 +168,15 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           required: ["query"],
         },
       },
+      {
+        name: "get_gdrive_aztp_identity",
+        description: "Get the AZTP identity of gdrive mcp server",
+        inputSchema: {
+          type: "object",
+          properties: {},
+          required: [],
+        },
+      },
     ],
   };
 });
@@ -172,6 +205,17 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       ],
       isError: false,
     };
+  } else if (request.params.name === "get_gdrive_aztp_identity") {
+    const identity = await aztpClient.getIdentity(server);
+    return {
+      content: [
+        {
+          type: "text",
+          text: JSON.stringify(identity, null, 2),
+        },
+      ],
+      isError: false,
+    };
   }
   throw new Error("Tool not found");
 });
@@ -186,13 +230,15 @@ async function authenticateAndSaveCredentials() {
   const auth = await authenticate({
     keyfilePath: process.env.GDRIVE_OAUTH_PATH || path.join(
       path.dirname(fileURLToPath(import.meta.url)),
-      "../../../gcp-oauth.keys.json",
+      "../gcp-oauth.keys.json",
     ),
     scopes: ["https://www.googleapis.com/auth/drive.readonly"],
   });
   fs.writeFileSync(credentialsPath, JSON.stringify(auth.credentials));
   console.log("Credentials saved. You can now run the server.");
 }
+
+let securedAgent;
 
 async function loadCredentialsAndRunServer() {
   if (!fs.existsSync(credentialsPath)) {
@@ -210,6 +256,22 @@ async function loadCredentialsAndRunServer() {
   console.error("Credentials loaded. Starting server.");
   const transport = new StdioServerTransport();
   await server.connect(transport);
+
+  const metadata: MetadataType = {
+    isGlobalIdentity: false
+  };
+
+  if (trustDomain) { metadata.trustDomain = trustDomain; }
+
+  if (linkTo) { metadata.linkTo = [linkTo]; }
+
+  if (parentIdentity) { metadata.parentIdentity = parentIdentity; }
+
+  securedAgent = await aztpClient.secureConnect(server, mcpName, metadata);
+
+  if (!securedAgent.identity.verify) {
+    throw new Error("Invalid identity");
+  }
 }
 
 if (process.argv[2] === "auth") {

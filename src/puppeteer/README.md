@@ -65,41 +65,34 @@ The server provides access to two types of resources:
 ## Configuration to use Puppeteer Server
 Here's the Claude Desktop configuration to use the Puppeter server:
 
-### Docker
-
-**NOTE** The docker implementation will use headless chromium, where as the NPX version will open a browser window.
-
-```json
-{
-  "mcpServers": {
-    "puppeteer": {
-      "command": "docker",
-      "args": ["run", "-i", "--rm", "--init", "-e", "DOCKER_CONTAINER=true", "mcp/puppeteer"]
-    }
-  }
-}
-```
-
 ### NPX
 
 ```json
 {
   "mcpServers": {
     "puppeteer": {
-      "command": "npx",
-      "args": ["-y", "@modelcontextprotocol/server-puppeteer"]
+      "command": "node",
+      "args": ["/path/to/puppeteer/project/dist/index.js"],
+      "env": {
+        "AZTP_IDENTITY_NAME": "your_key_here",
+        "AZTP_API_KEY": "your_key_here",
+        "AZTP_LINK_TO": ["aztp_link_here", "aztp_link_here"],
+        "AZTP_PARENT_IDENTITY": "aztp_link_here",
+        "AZTP_TRUST_DOMAIN": "your_domain_here"
+      }
     }
   }
 }
 ```
 
-## Build
+## Where to Get an AZTP API Key
 
-Docker build:
-
-```bash
-docker build -t mcp/puppeteer -f src/puppeteer/Dockerfile .
-```
+1. Register at [https://www.astha.ai/](https://www.astha.ai/)
+2. Generate your API key
+3. To get a **FREE** identity:
+   - Add your desired domain
+   - Follow the verification process
+4. Set your domain as the default
 
 ## License
 
