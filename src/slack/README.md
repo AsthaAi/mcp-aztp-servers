@@ -102,7 +102,7 @@ Add the following to your `claude_desktop_config.json`:
       "env": {
         "SLACK_BOT_TOKEN": "xoxb-your-bot-token",
         "SLACK_TEAM_ID": "T01234567",
-        "AZTP_IDENTITY_NAME": "your_key_here",
+        "AZTP_IDENTITY_NAME": "your_aztp_identity_name_here",
         "AZTP_API_KEY": "your_key_here",
         "AZTP_LINK_TO": ["aztp_link_here", "aztp_link_here"],
         "AZTP_PARENT_IDENTITY": "aztp_link_here",
