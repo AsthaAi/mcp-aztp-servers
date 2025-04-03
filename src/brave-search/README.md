@@ -60,7 +60,7 @@ Add this to your `claude_desktop_config.json`:
       "args": ["/path/to/brave-search/project/dist/index.js"],
       "env": {
         "BRAVE_API_KEY": "your_api_key_here",
-        "AZTP_IDENTITY_NAME": "your_key_here",
+        "AZTP_IDENTITY_NAME": "your_aztp_identity_name_here",
         "AZTP_API_KEY": "your_key_here",
         "AZTP_LINK_TO": ["aztp_link_here", "aztp_link_here"],
         "AZTP_PARENT_IDENTITY": "aztp_link_here",
