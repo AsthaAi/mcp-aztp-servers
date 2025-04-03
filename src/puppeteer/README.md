@@ -74,7 +74,7 @@ Here's the Claude Desktop configuration to use the Puppeter server:
       "command": "node",
       "args": ["/path/to/puppeteer/project/dist/index.js"],
       "env": {
-        "AZTP_IDENTITY_NAME": "your_key_here",
+        "AZTP_IDENTITY_NAME": "your_aztp_identity_name_here",
         "AZTP_API_KEY": "your_key_here",
         "AZTP_LINK_TO": ["aztp_link_here", "aztp_link_here"],
         "AZTP_PARENT_IDENTITY": "aztp_link_here",
